@@ -1,5 +1,7 @@
 package ru.avalon.javapp.devj130;
 
+import java.sql.SQLException;
+
 /**
  * Интерфейс определяет методы доступа к базе данных документов.
  *

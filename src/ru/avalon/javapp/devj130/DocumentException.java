@@ -3,6 +3,10 @@ package ru.avalon.javapp.devj130;
 /*
  * DEV-J130. Задача №2.
  */
+
+
+import java.sql.SQLException;
+
 /**
  * Класс представляет общее исключение, возникающее при работе с документами.
  * @author (C)Y.D.Zakovryashin, 12.11.2020
