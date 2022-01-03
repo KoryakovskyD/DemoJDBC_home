@@ -20,7 +20,7 @@ public class DbServer implements IDbService {
     }
 
     @Override
-    public boolean addAuthor(Author author) throws DocumentException {
+    public boolean addAuthor(Author author) throws DocumentException{
 
         try (Connection conn = DriverManager.getConnection(url, user, psw)) {
             int maxOrderId = 0;
@@ -31,7 +31,6 @@ public class DbServer implements IDbService {
                 // если id меньше максимального, то обновим таблицу, иначе добавим нового пользователя
                 if (author.getAuthor_id() <= maxOrderId) {
                     System.out.println("update");
-
                     try (PreparedStatement pstmt = conn.prepareStatement(
                             "update AUTHORS\n" +
                                     "set OTHER = ?\n" +
@@ -61,7 +60,7 @@ public class DbServer implements IDbService {
     }
 
     @Override
-    public boolean addDocument(Document doc, Author author) throws DocumentException {
+    public boolean addDocument(Document doc, Author author) throws DocumentException{
 
         try (Connection conn = DriverManager.getConnection(url, user, psw)) {
             int maxOrderId = 0;
@@ -72,6 +71,16 @@ public class DbServer implements IDbService {
                 // если id меньше максимального, то обновим таблицу, иначе добавим новый документ
                 if (doc.getDocument_id() <= maxOrderId) {
                     System.out.println("update");
+                    try (PreparedStatement pstmt = conn.prepareStatement(
+                            "update DOCUMENTS\n" +
+                                    "set DOC_NAME = ?, TEXT = ?, AUTHOR_ID = ?\n" +
+                                    "where ID = ?")) {
+                        pstmt.setString(1, doc.getTitle());
+                        pstmt.setString(2, doc.getText());
+                        pstmt.setInt(3, doc.getAuthor_id());
+                        pstmt.setInt(4, doc.getDocument_id());
+                        pstmt.executeUpdate();
+                    }
                     return false;
                 } else {
                     System.out.println("add");
@@ -94,31 +103,51 @@ public class DbServer implements IDbService {
     }
 
     @Override
-    public Document[] findDocumentByAuthor(Author author) throws DocumentException {
+    public Document[] findDocumentByAuthor(Author author) throws DocumentException{
         Document[] documents = new Document[20];
         try (Connection conn = DriverManager.getConnection(url, user, psw)) {
-            try (PreparedStatement pstmt = conn.prepareStatement(
-                    "select DOCUMENTS.ID, DOC_NAME, TEXT, AUTHOR_ID\n" +
-                            "from DOCUMENTS join AUTHORS on AUTHOR_ID = AUTHORS.ID\n" +
-                            "where AUTHORS.ID = ?"
-            )) {
-                pstmt.setInt(1,author.getAuthor_id());
-                try (ResultSet rs = pstmt.executeQuery()) {
-                    int i=0;
-                    while (rs.next()) {
-                        documents[i] = new Document(rs.getInt(1), rs.getString(2), rs.getString(3), rs.getInt(4));
-                        i++;
+
+            if (author.getAuthor_id() == 0) {
+                try (PreparedStatement pstmt = conn.prepareStatement(
+                        "select DOCUMENTS.ID, DOC_NAME, TEXT, AUTHOR_ID\n" +
+                                "from DOCUMENTS join AUTHORS on AUTHOR_ID = AUTHORS.ID\n" +
+                                "where CUSTOMER_FIO = ?"
+                )) {
+                    pstmt.setString(1, author.getAuthor());
+                    try (ResultSet rs = pstmt.executeQuery()) {
+                        int i = 0;
+                        while (rs.next()) {
+                            documents[i] = new Document(rs.getInt(1), rs.getString(2), rs.getString(3), rs.getInt(4));
+                            i++;
+                            //System.out.println(rs.getString(2));
+                        }
+                    }
+                }
+            } else {
+                try (PreparedStatement pstmt = conn.prepareStatement(
+                        "select DOCUMENTS.ID, DOC_NAME, TEXT, AUTHOR_ID\n" +
+                                "from DOCUMENTS join AUTHORS on AUTHOR_ID = AUTHORS.ID\n" +
+                                "where AUTHORS.ID = ?"
+                )) {
+                    pstmt.setInt(1, author.getAuthor_id());
+                    try (ResultSet rs = pstmt.executeQuery()) {
+                        int i = 0;
+                        while (rs.next()) {
+                            documents[i] = new Document(rs.getInt(1), rs.getString(2), rs.getString(3), rs.getInt(4));
+                            i++;
+                            //System.out.println(rs.getString(2));
+                        }
                     }
                 }
             }
-        } catch (SQLException throwables) {
-            throwables.printStackTrace();
+        } catch (SQLException e) {
+            new DocumentException("Exception in findDocumentByAuthor");
         }
         return documents;
     }
 
     @Override
-    public Document[] findDocumentByContent(String content) throws DocumentException {
+    public Document[] findDocumentByContent(String content) throws DocumentException{
         Document[] documents = new Document[20];
         try (Connection conn = DriverManager.getConnection(url, user, psw)) {
             try (PreparedStatement pstmt = conn.prepareStatement(
@@ -132,44 +161,75 @@ public class DbServer implements IDbService {
                     while (rs.next()) {
                         documents[i] = new Document(rs.getInt(1), rs.getString(2), rs.getString(3), rs.getInt(4));
                         i++;
+                        //System.out.println(rs.getString(2));
                     }
                 }
             }
-        } catch (SQLException throwables) {
-            throwables.printStackTrace();
+
+            try (PreparedStatement pstmt = conn.prepareStatement(
+                    "select DOCUMENTS.ID, DOC_NAME, TEXT, AUTHOR_ID\n" +
+                            "from DOCUMENTS\n" +
+                            "where DOC_NAME like ?"
+            )) {
+                pstmt.setString(1, "%" + content + "%");
+                try (ResultSet rs = pstmt.executeQuery()) {
+                    int i=0;
+                    while (rs.next()) {
+                        documents[i] = new Document(rs.getInt(1), rs.getString(2), rs.getString(3), rs.getInt(4));
+                        i++;
+                        //System.out.println(rs.getString(2));
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            new DocumentException("Exception in findDocumentByContent");
         }
         return documents;
     }
 
     @Override
-    public boolean deleteAuthor(Author author) throws DocumentException {
+    public boolean deleteAuthor(Author author) throws DocumentException{
         try (Connection conn = DriverManager.getConnection(url, user, psw)) {
-                try (PreparedStatement pstmt = conn.prepareStatement(
-                        "delete from AUTHORS\n" +
-                                "where ID = ?")) {
-                    pstmt.setInt(1, author.getAuthor_id());
-                    pstmt.executeUpdate();
-                }
-                return false;
-        } catch (SQLException throwables) {
+
+            try (PreparedStatement pstmt = conn.prepareStatement(
+                    "delete from DOCUMENTS\n" +
+                            "where AUTHOR_ID = ?")) {
+                pstmt.setInt(1, author.getAuthor_id());
+                pstmt.executeUpdate();
+            }
+
+            try (PreparedStatement pstmt = conn.prepareStatement(
+                     "delete from AUTHORS\n" +
+                             "where ID = ?")) {
+                pstmt.setInt(1, author.getAuthor_id());
+                pstmt.executeUpdate();
+            }
+            return true;
+        } catch (SQLException e) {
             new DocumentException("Exception in addAuthors");
             return false;
         }
     }
 
-        @Override
-    public boolean deleteAuthor(int id) throws DocumentException {
+    @Override
+    public boolean deleteAuthor(int id) throws DocumentException{
             try (Connection conn = DriverManager.getConnection(url, user, psw)) {
-                try (Statement stmt = conn.createStatement()) {
-                    try (PreparedStatement pstmt = conn.prepareStatement(
+
+                try (PreparedStatement pstmt = conn.prepareStatement(
+                        "delete from DOCUMENTS\n" +
+                                "where AUTHOR_ID = ?")) {
+                    pstmt.setInt(1, id);
+                    pstmt.executeUpdate();
+                }
+                try (PreparedStatement pstmt = conn.prepareStatement(
                             "delete from AUTHORS\n" +
                                     "where ID = ?")) {
-                        pstmt.setInt(1, id);
-                        pstmt.executeUpdate();
-                    }
-                    return false;
+                    pstmt.setInt(1, id);
+                    pstmt.executeUpdate();
                 }
-            } catch (SQLException throwables) {
+
+                return true;
+            } catch (SQLException e) {
                 new DocumentException("Exception in addAuthors");
                 return false;
             }
@@ -201,13 +261,15 @@ public class DbServer implements IDbService {
         DbServer dbServer = new DbServer("jdbc:derby://localhost:1527/test", "test", "test");
         dbServer.info();
         dbServer.init();
-        //dbServer.addAuthor(new Author(6, "Santa Claus3"));
-        //dbServer.addAuthor(new Author(6, "", "correct comments"));
-        //dbServer.deleteAuthor(new Author(6,"",""));
-        //dbServer.deleteAuthor(5);
+        //dbServer.addAuthor(new Author(4, "Santa Claus3"));
+        //dbServer.addAuthor(new Author(6, "", "Report comments"));
+        //dbServer.addDocument(new Document(6,"Test report", "Report first", 5), new Author(5, "ffe"));
+        //dbServer.deleteAuthor(new Author(5,"",""));
+        //dbServer.deleteAuthor(4);
         //dbServer.findDocumentByAuthor(new Author(2, "ddd", "wdwd"));
-        dbServer.findDocumentByContent("Report");
-        //dbServer.addDocument(new Document(5,"Test report", "Report first", 3), new Author(2, "ffe"));
+        //dbServer.findDocumentByAuthor(new Author(0, "Jim Beam", ""));
+        //dbServer.findDocumentByAuthor(new Author(3, "Jim Beam", ""));
+        dbServer.findDocumentByContent("report");
     }
 
 
