@@ -141,6 +141,7 @@ public class DbServer implements IDbService {
         }
     }
 
+    
     @Override
     public boolean deleteAuthor(Author author) throws DocumentException {
         int id = author.getAuthor_id();
