@@ -1,9 +1,8 @@
 package ru.avalon.javapp.devj130;
 
-import javax.print.Doc;
+import java.net.Socket;
 import java.sql.*;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.List;
 
@@ -68,10 +67,14 @@ public class DbServer implements IDbService {
 
         try (Connection conn = DriverManager.getConnection(url, user, psw)) {
             int maxOrderId = 0;
+
+            addAuthor(author);
+
             try (Statement stmt = conn.createStatement();
                  ResultSet rs = stmt.executeQuery("select max (ID) from DOCUMENTS")) {
                 rs.next();
                 maxOrderId = rs.getInt(1);
+
                 // если id меньше максимального, то обновим таблицу, иначе добавим новый документ
                 if (doc.getDocument_id() <= maxOrderId) {
                     System.out.println("update");
@@ -101,7 +104,6 @@ public class DbServer implements IDbService {
         if (author == null)
             throw new DocumentException("'author' can't be empty");
 
-        List<Document> documents = new ArrayList<>();
         try (Connection conn = DriverManager.getConnection(url, user, psw)) {
             try (PreparedStatement pstmt = conn.prepareStatement(
                     "select DOCUMENTS.ID, DOC_NAME, TEXT, AUTHOR_ID\n" +
@@ -110,7 +112,7 @@ public class DbServer implements IDbService {
             )) {
                 pstmt.setInt(1,author.getAuthor_id());
                 try (ResultSet rs = pstmt.executeQuery()) {
-                    return createDocArray(documents, rs);
+                    return createDocArray(rs);
                 }
             }
         } catch (SQLException e) {
@@ -124,7 +126,6 @@ public class DbServer implements IDbService {
         if (content == null || content.equals(""))
             throw new DocumentException("'content' can't be null");
 
-        List<Document> documents = new ArrayList<>();
         try (Connection conn = DriverManager.getConnection(url, user, psw)) {
             try (PreparedStatement pstmt = conn.prepareStatement(
                     "select DOCUMENTS.ID, DOC_NAME, TEXT, AUTHOR_ID\n" +
@@ -133,7 +134,7 @@ public class DbServer implements IDbService {
             )) {
                 pstmt.setString(1, "%" + content + "%");
                 try (ResultSet rs = pstmt.executeQuery()) {
-                    return createDocArray(documents, rs);
+                    return createDocArray(rs);
                 }
             }
         } catch (SQLException e) {
@@ -141,7 +142,7 @@ public class DbServer implements IDbService {
         }
     }
 
-    
+
     @Override
     public boolean deleteAuthor(Author author) throws DocumentException {
         int id = author.getAuthor_id();
@@ -166,8 +167,10 @@ public class DbServer implements IDbService {
     }
 
     @Override
-    public void close() throws Exception {
-
+    public void close() throws SQLException {
+        if (con != null && con.isValid(0)) {
+            con.close();
+        }
     }
 
     private void info() {
@@ -179,43 +182,37 @@ public class DbServer implements IDbService {
         }
     }
 
-    private void init() {
-        try {
-            con = DriverManager.getConnection(url,user,psw);
-            st = con.createStatement();
-        } catch (NullPointerException | SQLException e){
-            throw new IllegalArgumentException("Bad connection with database");
-        }
+    private void init() throws SQLException {
+         con = DriverManager.getConnection(url,user,psw);
+         if (con == null)
+             throw new IllegalArgumentException("Connection is null");
     }
 
-    public static void main(String[] args) throws SQLException, DocumentException {
-        DbServer dbServer = new DbServer("jdbc:derby://localhost:1527/test", "test", "test");
-        dbServer.info();
-        dbServer.init();
-        //dbServer.addAuthor(new Author(6, "Santa Claus3"));
-        //dbServer.addAuthor(new Author(6, "", "correct comments"));
-        //dbServer.deleteAuthor(new Author(6,"",""));
-        //dbServer.deleteAuthor(5);
-        //dbServer.findDocumentByAuthor(new Author(3, "Jim Beam", "wdwd"));
-        dbServer.findDocumentByContent("Report");
-        //dbServer.addDocument(new Document(6,"Test report", "Report first", 3), new Author(3, "Jim Beam"));
+    public static void main(String[] args) throws DocumentException {
+        try (DbServer dbServer = new DbServer("jdbc:derby://localhost:1527/test", "test", "test")) {
+            dbServer.info();
+            dbServer.init();
+            //dbServer.addAuthor(new Author(6, "Santa Claus3"));
+            //dbServer.addAuthor(new Author(6, "", "correct comments"));
+            //dbServer.deleteAuthor(new Author(6,"",""));
+            //dbServer.deleteAuthor(5);
+            //dbServer.findDocumentByAuthor(new Author(3, "Jim Beam", "wdwd"));
+            dbServer.findDocumentByContent("Report");
+            //dbServer.addDocument(new Document(6,"Test report", "Report first", 3), new Author(5, "Jim Beamenst"));
+        } catch (SQLException e) {
+            System.out.println("Bad connection with database");
+        }
     }
 
 
     // Заполнение массива документами
-    private static Document[] createDocArray(List<Document> documents, ResultSet rs) throws SQLException {
-        int i=0;
+    private static Document[] createDocArray(ResultSet rs) throws SQLException {
+        List<Document> documents = new ArrayList<>();
         while (rs.next()) {
             documents.add(new Document(rs.getInt(1), rs.getString(2), rs.getString(3), rs.getInt(4)));
-            i++;
         }
+        Document[] res = documents.toArray(new Document[0]);
 
-        Document[] res = new Document[documents.size()];
-        for (int j = 0; j < documents.size(); j++) {
-            res[j] = documents.get(j);
-        }
-
-        //System.out.println(Arrays.toString(res));
         return res;
     }
 }
